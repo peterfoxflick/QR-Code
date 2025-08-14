@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Simple URL → QR</title>
+  <style>
+    :root { --bg:#f9fafb; --panel:#ffffff; --text:#111827; --muted:#6b7280; --brand:#2563eb; }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; background:var(--bg); color:var(--text); display:flex; align-items:center; justify-content:center}
+    .container{width:100%; max-width:520px; background:var(--panel); padding:22px; border-radius:14px; box-shadow:0 8px 30px rgba(0,0,0,.08); text-align:center}
+    h1{margin:.2rem 0 .25rem}
+    p.sub{margin:.25rem 0 1rem; color:var(--muted); font-size:.95rem}
+    .row{display:grid; grid-template-columns: 1fr auto; gap:10px; align-items:center}
+    @media (max-width:520px){ .row{grid-template-columns:1fr} }
+    input[type=url]{width:100%; padding:12px 14px; border:1px solid #e5e7eb; border-radius:10px; font-size:1rem}
+    input[type=url]:focus{outline:none; border-color:#bfdbfe; box-shadow:0 0 0 3px rgba(37,99,235,.2)}
+    button{border:0; background:var(--brand); color:#fff; padding:12px 16px; border-radius:10px; font-weight:600; cursor:pointer}
+    button:disabled{background:#9ca3af; cursor:not-allowed}
+    .hint{font-size:.85rem; color:var(--muted); margin-top:.5rem}
+    .qr{margin-top:16px; display:grid; place-items:center}
+    .actions{margin-top:10px; display:flex; gap:8px; justify-content:center}
+    .actions button{background:#111827}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>QR Code Generator</h1>
+    <p class="sub">For URLs only. Paste your link, hit Generate, download PNG. All in your browser.</p>
+
+    <div class="row">
+      <input id="urlInput" type="url" placeholder="https://example.com" autocomplete="url" spellcheck="false" />
+      <button id="generateBtn">Generate</button>
+    </div>
+    <div id="error" class="hint" role="status"></div>
+
+    <div id="qrContainer" class="qr" aria-live="polite"></div>
+    <div class="actions">
+      <button id="downloadBtn" disabled>Download PNG</button>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <script>
+    const urlInput = document.getElementById('urlInput');
+    const generateBtn = document.getElementById('generateBtn');
+    const qrContainer = document.getElementById('qrContainer');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const err = document.getElementById('error');
+    let lastDataUrl = '';
+
+    function normalizeUrl(v){
+      const s = (v || '').trim();
+      if(!s) return '';
+      // Add protocol for bare domains (example.com → https://example.com)
+      if(!/^([a-z][a-z0-9+.-]*:)?\/\//i.test(s) && /\./.test(s)) return 'https://' + s;
+      return s;
+    }
+
+    function isValidUrl(v){
+      try{ new URL(v); return true; } catch{ return false; }
+    }
+
+    function renderQR(url){
+      qrContainer.innerHTML = '';
+      const canvas = document.createElement('canvas');
+      qrContainer.appendChild(canvas);
+      QRCode.toCanvas(canvas, url, { width: 320, errorCorrectionLevel: 'M' }, (err2) => {
+        if (err2){ console.error(err2); showError('Could not generate QR.'); return; }
+        lastDataUrl = canvas.toDataURL('image/png');
+        downloadBtn.disabled = false;
+      });
+    }
+
+    function showError(msg){ err.textContent = msg || ''; }
+
+    function handleGenerate(){
+      const normalized = normalizeUrl(urlInput.value);
+      if(!normalized || !isValidUrl(normalized)){
+        showError('Please enter a valid URL.');
+        downloadBtn.disabled = true; qrContainer.innerHTML = ''; return;
+      }
+      showError('');
+      urlInput.value = normalized; // reflect auto https://
+      renderQR(normalized);
+    }
+
+    // Events
+    generateBtn.addEventListener('click', handleGenerate);
+    urlInput.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') handleGenerate(); });
+    urlInput.addEventListener('input', ()=>{ showError(''); downloadBtn.disabled = true; });
+
+    downloadBtn.addEventListener('click', () => {
+      if (!lastDataUrl) return;
+      const host = (()=>{ try{ return new URL(urlInput.value).host.replace(/[^a-z0-9.-]/gi,''); }catch{return 'qr';} })();
+      const a = document.createElement('a');
+      a.href = lastDataUrl;
+      a.download = `qr-${host}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    });
+
+    // Prefill via ?u= param (optional convenience)
+    const params = new URLSearchParams(location.search);
+    if(params.has('u')){
+      urlInput.value = decodeURIComponent(params.get('u'));
+      handleGenerate();
+    }
+  </script>
+</body>
+</html>
